@@ -18,6 +18,7 @@ if uploaded_file:
         st.session_state.stop_processing = False
         start_time = time.time()
         start_dt = datetime.now()
+        st.markdown(f"**Start Time:** {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
 
         with st.spinner("Reading and preparing document chunks..."):
             pre_result = extract_soc2_summary(uploaded_file, prepare_only=True)
@@ -27,14 +28,20 @@ if uploaded_file:
         st.markdown(f"**Total Chunks Identified:** {total_chunks}")
         progress = st.empty()
         placeholder = st.empty()
+        time_placeholder = st.empty()
         stop_btn = st.button("🛑 Stop")
 
-        def on_chunk(i):
-            progress.markdown(f"Processing chunk {i+1} of {total_chunks}...")
+        chunk_progress = st.empty()
+        processed_chunks = 0
 
         uploaded_file.seek(0)  # Reset the file pointer before reusing
 
         with st.spinner("Processing chunks with GPT-4..."):
+            def on_chunk(index):
+                nonlocal processed_chunks
+                processed_chunks += 1
+                chunk_progress.markdown(f"📦 Processed {processed_chunks} / {total_chunks} chunks")
+
             result = extract_soc2_summary(uploaded_file, on_chunk=on_chunk)
 
         end_time = time.time()
@@ -43,7 +50,6 @@ if uploaded_file:
         minutes, seconds = divmod(elapsed, 60)
 
         st.success("✅ Analysis Complete")
-        st.markdown(f"**Start Time:** {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
         st.markdown(f"**End Time:** {end_dt.strftime('%Y-%m-%d %H:%M:%S')}")
         st.markdown(f"**Time Taken:** {minutes} min {seconds} sec")
 
