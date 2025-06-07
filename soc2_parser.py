@@ -1,7 +1,5 @@
 import fitz  # PyMuPDF
-import os
 from langchain.chat_models import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
 from langchain.schema import HumanMessage
 
 def extract_text_from_pdf(file):
@@ -14,28 +12,47 @@ def extract_text_from_pdf(file):
 def extract_soc2_summary(file):
     raw_text = extract_text_from_pdf(file)
 
-    prompt = (
-        "You're an expert compliance analyst. "
-        "Given this SOC 2 report, extract the following:\n"
-        "- Auditor Name and Firm\n"
-        "- Time Period of the report\n"
-        "- Scope of audit (systems, teams, functions)\n"
-        "- Any noted exceptions and management responses\n"
-        "- Key security practices (e.g., encryption, access control)\n\n"
-        "Respond in this JSON format:\n"
-        "{\n"
-        "  'Auditor': '',\n"
-        "  'Time Period': '',\n"
-        "  'Scope': '',\n"
-        "  'Exceptions': '',\n"
-        "  'Security Controls': ''\n"
-        "}\n\n"
-        f"Document:\n{raw_text[:7000]}"  # limit to avoid token overload
-    )
+    prompt = f"""
+You are a SOC 2 compliance analyst. Analyze the following SOC 2 report text and extract the following structured fields:
+
+1. Auditor name and audit firm  
+2. Audit time period  
+3. Scope of audit (systems, teams, services, etc.)  
+4. List of any exceptions with control name, exception, and management response  
+5. Number of controls that were Passed, Passed with Exception, or Excluded (return counts only)  
+6. List 3–4 Risk/Focus Tags based on areas mentioned in the report (like Encryption, Access Control, Data Residency, etc.)  
+7. Provide a short 3–5 bullet summary of the system description (how it handles infra, data, access, logging)
+
+Return result as a Python dictionary like:
+{{
+  "Auditor": "",
+  "Time Period": "",
+  "Scope": "",
+  "Status Counts": {{
+      "Passed": int,
+      "Passed with Exception": int,
+      "Excluded": int
+  }},
+  "Exceptions": [
+    {{
+      "Control": "",
+      "Exception": "",
+      "Response": ""
+    }},
+    ...
+  ],
+  "Tags": ["", "", ""],
+  "System Description": ["", "", ""]
+}}
+
+Document:
+{raw_text[:7000]}
+    """
 
     llm = ChatOpenAI(model="gpt-4", temperature=0)
     response = llm([HumanMessage(content=prompt)])
+
     try:
-        return eval(response.content)
+        return eval(response.content)  # ⚠️ If LLM returns exact dict, this works
     except Exception:
-        return {"Error": "Failed to parse AI response. Please review raw text."}
+        return {"Error": "Could not parse AI response. Please try with a different document."}
