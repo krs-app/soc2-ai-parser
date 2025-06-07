@@ -19,7 +19,7 @@ def extract_soc2_summary(file):
     if raw_text.startswith("[ERROR]"):
         return {"Error": raw_text}
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=200)
     chunks = splitter.split_text(raw_text)
     total_chunks = len(chunks)
 
