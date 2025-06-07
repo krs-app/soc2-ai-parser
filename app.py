@@ -1,5 +1,5 @@
 import streamlit as st
-from parser import extract_soc2_info
+from soc2_parser import extract_soc2_info
 
 st.set_page_config(page_title="SOC 2 Parser", layout="centered")
 
