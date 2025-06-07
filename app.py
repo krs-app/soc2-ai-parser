@@ -24,16 +24,23 @@ if uploaded_file:
         st.session_state.elapsed = None
         st.session_state.start_analysis_triggered = None
 
+    # Placeholders for processing details
+    details_box = st.empty()
+    start_placeholder = st.empty()
+    chunk_placeholder = st.empty()
+    end_placeholder = st.empty()
+    time_placeholder = st.empty()
+
     if st.button("⏳ Start Analysis"):
         st.session_state.start_analysis_triggered = True
         st.session_state.start_time = datetime.now()
 
-        # Display Start Time and placeholder section before analysis
-        st.subheader("📌 Processing Details")
-        st.markdown(f"**Start Time:** {st.session_state.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        st.markdown("**Total Chunks Identified:** _Loading..._")
-        st.markdown("**End Time:** _Pending..._")
-        st.markdown("**Time Taken:** _Pending..._")
+        # Display processing info immediately
+        details_box.subheader("📌 Processing Details")
+        start_placeholder.markdown(f"**Start Time:** {st.session_state.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        chunk_placeholder.markdown("**Total Chunks Identified:** _Loading..._")
+        end_placeholder.markdown("**End Time:** _Pending..._")
+        time_placeholder.markdown("**Time Taken:** _Pending..._")
 
         with st.spinner("Analyzing the document with GPT..."):
             start_unix = time.time()
@@ -42,20 +49,15 @@ if uploaded_file:
             st.session_state.end_time = datetime.now()
             st.session_state.elapsed = round(time.time() - start_unix)
 
+            # Update placeholders
+            chunk_placeholder.markdown(f"**Total Chunks Identified:** {result.get('Total Chunks', '?')}")
+            end_placeholder.markdown(f"**End Time:** {st.session_state.end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            minutes, seconds = divmod(st.session_state.elapsed, 60)
+            time_placeholder.markdown(f"**Time Taken:** {minutes} min {seconds} sec")
+
 # Display results
 if st.session_state.result:
     result = st.session_state.result
-
-    st.subheader("📌 Processing Details")
-    st.markdown(f"**Start Time:** {st.session_state.start_time.strftime('%Y-%m-%d %H:%M:%S') if st.session_state.start_time else '_'}")
-    st.markdown(f"**Total Chunks Identified:** {result.get('Total Chunks', '?')}")
-    st.markdown(f"**End Time:** {st.session_state.end_time.strftime('%Y-%m-%d %H:%M:%S') if st.session_state.end_time else '_'}")
-
-    if st.session_state.elapsed is not None:
-        minutes, seconds = divmod(st.session_state.elapsed, 60)
-        st.markdown(f"**Time Taken:** {minutes} min {seconds} sec")
-    else:
-        st.markdown("**Time Taken:** _")
 
     st.subheader("📊 Summary Insights")
 
