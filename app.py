@@ -10,9 +10,16 @@ st.set_page_config(page_title="SOC 2 AI Parser", layout="wide")
 st.title("🔍 SOC 2 Report Analyzer (AI-Powered)")
 
 # Initialize session state
-for key in ["result", "start_time", "end_time", "elapsed", "start_analysis_triggered", "abort_requested"]:
+for key, default in {
+    "result": None,
+    "start_time": None,
+    "end_time": None,
+    "elapsed": None,
+    "start_analysis_triggered": False,
+    "abort_requested": False
+}.items():
     if key not in st.session_state:
-        st.session_state[key] = None
+        st.session_state[key] = default
 
 uploaded_file = st.file_uploader("Upload SOC 2 PDF report", type="pdf")
 
@@ -23,8 +30,8 @@ if uploaded_file:
         st.session_state.start_time = None
         st.session_state.end_time = None
         st.session_state.elapsed = None
-        st.session_state.start_analysis_triggered = None
-        st.session_state.abort_requested = None
+        st.session_state.start_analysis_triggered = False
+        st.session_state.abort_requested = False
 
     # Placeholders for processing details
     details_box = st.empty()
