@@ -37,6 +37,11 @@ def extract_soc2_summary(file):
     chunk_errors = []
 
     for i, chunk in enumerate(chunks[:5]):  # Adjust number of chunks as needed
+
+        # Skip low-signal text chunks (too small or mostly headers)
+        if len(chunk.strip()) < 300 or chunk.lower().count("section") > 4:
+            continue
+
         prompt = f"""
         You are a SOC 2 compliance analyst.
 
@@ -49,7 +54,7 @@ def extract_soc2_summary(file):
         - System description (3–5 bullet points)
         - Control status summary with: Passed, Passed with Exception, Excluded
 
-        Return output in valid JSON only. Do not include any explanations or code block syntax.
+        Return output in valid JSON only. Do not include any explanations or formatting.
 
         {{
             "Auditor": "...",
@@ -69,12 +74,24 @@ def extract_soc2_summary(file):
             response = llm([HumanMessage(content=prompt)])
             chunk_text = response.content.strip()
 
-            # Remove ```json blocks if present
-            if chunk_text.startswith("```json"):
+            # Clean and pre-process output
+            chunk_text = chunk_text.encode("utf-8", "ignore").decode().strip()
+            if not chunk_text or len(chunk_text) < 5:
+                chunk_errors.append(f"Chunk {i+1}: Empty or invalid response")
+                continue
+
+            # Remove triple backticks
+            if chunk_text.startswith("```json") or chunk_text.startswith("```"):
                 chunk_text = chunk_text.replace("```json", "").replace("```", "").strip()
+
+            # Remove intro text before first {
+            json_start = chunk_text.find("{")
+            if json_start > 0:
+                chunk_text = chunk_text[json_start:]
 
             chunk_result = json.loads(chunk_text)
 
+            # Merge into master summary
             if not summary_info["Auditor"]:
                 summary_info["Auditor"] = chunk_result.get("Auditor", "")
             if not summary_info["Time Period"]:
