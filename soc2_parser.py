@@ -5,7 +5,6 @@ from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from concurrent.futures import ThreadPoolExecutor
-import streamlit as st
 
 def extract_text_from_pdf(file):
     try:
@@ -41,8 +40,10 @@ def extract_soc2_summary(file, prepare_only=False, on_chunk=None):
     chunk_errors = []
 
     def process_chunk(i_chunk):
-        if on_chunk:
-            on_chunk(i_chunk)
+        # DO NOT call Streamlit from background threads
+        # if on_chunk:
+        #     on_chunk(i_chunk)
+
         chunk = chunks[i_chunk]
         prompt = f"""
         Extract as JSON:
