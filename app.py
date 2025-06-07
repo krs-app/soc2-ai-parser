@@ -25,27 +25,41 @@ if uploaded_file:
         # ---------- CONTROL STATUS CHART ----------
         st.divider()
         st.subheader("✅ Control Result Summary")
-
-        st.subheader("✅ Control Result Summary")
         status_counts = result.get("Status Counts", {})
         
-        # Ensure values are integers and default to 0 if missing
-        passed = int(status_counts.get("Passed", 0) or 0)
-        exceptions = int(status_counts.get("Passed with Exception", 0) or 0)
-        excluded = int(status_counts.get("Excluded", 0) or 0)
+        # Safe parse for chart values
+        def safe_int(val):
+            try:
+                return int(val)
+            except:
+                return 0
+        
+        passed = safe_int(status_counts.get("Passed"))
+        exceptions = safe_int(status_counts.get("Passed with Exception"))
+        excluded = safe_int(status_counts.get("Excluded"))
         
         if passed + exceptions + excluded == 0:
             st.warning("No control summary data available.")
         else:
-            fig, ax = plt.subplots()
-            ax.pie(
+            fig, ax = plt.subplots(figsize=(5, 5))  # Smaller figure size
+        
+            wedges, texts, autotexts = ax.pie(
                 [passed, exceptions, excluded],
                 labels=["Passed", "Passed with Exception", "Excluded"],
-                autopct="%1.1f%%",
-                startangle=90,
-                wedgeprops={'width': 0.4}
+                autopct=lambda pct: f"{pct:.1f}% ({int(round(pct/100 * (passed + exceptions + excluded)))})",
+                startangle=140,
+                wedgeprops={'width': 0.4},
+                textprops=dict(color="black", fontsize=10)
             )
             ax.axis("equal")
+        
+            # Move legend outside
+            ax.legend(wedges, ["Passed", "Passed with Exception", "Excluded"],
+                      title="Status",
+                      loc="center left",
+                      bbox_to_anchor=(1, 0.5),
+                      fontsize=9)
+        
             st.pyplot(fig)
 
             st.markdown(
