@@ -38,14 +38,24 @@ def extract_soc2_summary(file):
 
     for i, chunk in enumerate(chunks[:5]):  # Adjust number of chunks as needed
 
-        # Skip low-signal text chunks (too small or mostly headers)
         if len(chunk.strip()) < 300 or chunk.lower().count("section") > 4:
             continue
 
         prompt = f"""
         You are a SOC 2 compliance analyst.
 
-        Read the following SOC 2 report chunk and extract these fields:
+        If the input chunk has no relevant content (e.g. table of contents, glossary, definitions), return this exact JSON:
+        {{
+            "Exceptions": [],
+            "Tags": [],
+            "System Description": [],
+            "Status Counts": {{"Passed": 0, "Passed with Exception": 0, "Excluded": 0}},
+            "Auditor": "",
+            "Time Period": "",
+            "Scope": ""
+        }}
+
+        Otherwise, extract:
         - Auditor name and firm
         - Audit time period
         - Scope of audit
@@ -54,7 +64,7 @@ def extract_soc2_summary(file):
         - System description (3–5 bullet points)
         - Control status summary with: Passed, Passed with Exception, Excluded
 
-        Return output in valid JSON only. Do not include any explanations or formatting.
+        Return output in valid JSON only. Do not include any explanation or formatting.
 
         {{
             "Auditor": "...",
@@ -74,24 +84,26 @@ def extract_soc2_summary(file):
             response = llm([HumanMessage(content=prompt)])
             chunk_text = response.content.strip()
 
-            # Clean and pre-process output
+            # Retry once if empty or too short
+            if not chunk_text or len(chunk_text) < 30:
+                response = llm([HumanMessage(content=prompt)])
+                chunk_text = response.content.strip()
+
             chunk_text = chunk_text.encode("utf-8", "ignore").decode().strip()
+
             if not chunk_text or len(chunk_text) < 5:
                 chunk_errors.append(f"Chunk {i+1}: Empty or invalid response")
                 continue
 
-            # Remove triple backticks
             if chunk_text.startswith("```json") or chunk_text.startswith("```"):
                 chunk_text = chunk_text.replace("```json", "").replace("```", "").strip()
 
-            # Remove intro text before first {
             json_start = chunk_text.find("{")
             if json_start > 0:
                 chunk_text = chunk_text[json_start:]
 
             chunk_result = json.loads(chunk_text)
 
-            # Merge into master summary
             if not summary_info["Auditor"]:
                 summary_info["Auditor"] = chunk_result.get("Auditor", "")
             if not summary_info["Time Period"]:
@@ -110,7 +122,9 @@ def extract_soc2_summary(file):
                     continue
 
         except Exception as e:
-            chunk_errors.append(f"Chunk {i+1}: {str(e)}")
+            chunk_errors.append(
+                f"Chunk {i+1}: {str(e)}\n--- Raw GPT Output ---\n{response.content[:500]}\n--- Cleaned Text ---\n{chunk_text[:500]}"
+            )
             continue
 
     summary_info["Exceptions"] = all_exceptions
@@ -119,7 +133,7 @@ def extract_soc2_summary(file):
 
     if chunk_errors:
         summary_info["Error"] = (
-            f"{len(chunk_errors)} chunk(s) failed to parse:\n" + "\n".join(chunk_errors)
+            f"{len(chunk_errors)} chunk(s) failed to parse:\n" + "\n\n".join(chunk_errors)
         )
 
     return summary_info
