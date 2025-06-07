@@ -21,6 +21,7 @@ def extract_soc2_summary(file):
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
     chunks = splitter.split_text(raw_text)
+    total_chunks = len(chunks)
 
     llm = ChatOpenAI(model="gpt-4", temperature=0)
 
@@ -36,11 +37,7 @@ def extract_soc2_summary(file):
 
     chunk_errors = []
 
-    for i, chunk in enumerate(chunks[:5]):  # Adjust number of chunks as needed
-
-        if len(chunk.strip()) < 300 or chunk.lower().count("section") > 4:
-            continue
-
+    for i, chunk in enumerate(chunks):
         prompt = f"""
         You are a SOC 2 compliance analyst.
 
@@ -84,7 +81,7 @@ def extract_soc2_summary(file):
             response = llm([HumanMessage(content=prompt)])
             chunk_text = response.content.strip()
 
-            # Retry once if empty or too short
+            # Retry once if empty
             if not chunk_text or len(chunk_text) < 30:
                 response = llm([HumanMessage(content=prompt)])
                 chunk_text = response.content.strip()
@@ -130,6 +127,8 @@ def extract_soc2_summary(file):
     summary_info["Exceptions"] = all_exceptions
     summary_info["Tags"] = list(tags_set)
     summary_info["System Description"] = list(set(system_bullets))
+    summary_info["Total Chunks"] = total_chunks
+    summary_info["Failed Chunks"] = len(chunk_errors)
 
     if chunk_errors:
         summary_info["Error"] = (
