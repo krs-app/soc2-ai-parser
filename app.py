@@ -10,12 +10,15 @@ st.title("🔍 SOC 2 Report Analyzer (AI-Powered)")
 
 if "stop_processing" not in st.session_state:
     st.session_state.stop_processing = False
+if "processed_chunks" not in st.session_state:
+    st.session_state.processed_chunks = 0
 
 uploaded_file = st.file_uploader("Upload SOC 2 PDF report", type="pdf")
 
 if uploaded_file:
     if st.button("⏳ Start Analysis"):
         st.session_state.stop_processing = False
+        st.session_state.processed_chunks = 0
         start_time = time.time()
         start_dt = datetime.now()
         st.markdown(f"**Start Time:** {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -32,15 +35,13 @@ if uploaded_file:
         stop_btn = st.button("🛑 Stop")
 
         chunk_progress = st.empty()
-        processed_chunks = 0
 
         uploaded_file.seek(0)  # Reset the file pointer before reusing
 
         with st.spinner("Processing chunks with GPT-4..."):
             def on_chunk(index):
-                nonlocal processed_chunks
-                processed_chunks += 1
-                chunk_progress.markdown(f"📦 Processed {processed_chunks} / {total_chunks} chunks")
+                st.session_state.processed_chunks += 1
+                chunk_progress.markdown(f"📦 Processed {st.session_state.processed_chunks} / {total_chunks} chunks")
 
             result = extract_soc2_summary(uploaded_file, on_chunk=on_chunk)
 
