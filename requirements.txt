@@ -5,3 +5,4 @@ openai
 pymupdf
 PyPDF2
 matplotlib
+html5lib
