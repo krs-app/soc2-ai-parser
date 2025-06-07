@@ -1,94 +1,138 @@
-# soc2_parser.py
-import fitz
+import fitz  # PyMuPDF
 import json
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from concurrent.futures import ThreadPoolExecutor
 
 def extract_text_from_pdf(file):
     try:
         doc = fitz.open(stream=file.read(), filetype="pdf")
-        return "".join([page.get_text() for page in doc])
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        return text
     except Exception as e:
-        return f"[ERROR] {e}"
+        return f"[ERROR] Failed to read PDF: {e}"
 
-def extract_soc2_summary(file, prepare_only=False, on_chunk=None):
-    text = extract_text_from_pdf(file)
-    if text.startswith("[ERROR]"):
-        return {"Error": text}
+def extract_soc2_summary(file):
+    raw_text = extract_text_from_pdf(file)
+    if raw_text.startswith("[ERROR]"):
+        return {"Error": raw_text}
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=500)
-    chunks = splitter.split_text(text)
-
-    if prepare_only:
-        return {"Total Chunks": len(chunks)}
+    splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+    chunks = splitter.split_text(raw_text)
+    total_chunks = len(chunks)
 
     llm = ChatOpenAI(model="gpt-4", temperature=0)
-    summary = {
+
+    all_exceptions = []
+    tags_set = set()
+    system_bullets = []
+    summary_info = {
         "Auditor": "",
         "Time Period": "",
         "Scope": "",
-        "Exceptions": [],
-        "Tags": [],
-        "System Description": [],
-        "Status Counts": {"Passed": 0, "Passed with Exception": 0, "Excluded": 0},
-        "Total Chunks": len(chunks),
-        "Failed Chunks": 0
+        "Status Counts": {"Passed": 0, "Passed with Exception": 0, "Excluded": 0}
     }
-    tags_set = set()
+
     chunk_errors = []
 
-    def process_chunk(i_chunk):
-        # DO NOT call Streamlit from background threads
-        # if on_chunk:
-        #     on_chunk(i_chunk)
-
-        chunk = chunks[i_chunk]
+    for i, chunk in enumerate(chunks):
         prompt = f"""
-        Extract as JSON:
-        - Auditor
-        - Time Period
-        - Scope
-        - Exceptions (Control, Exception, Response)
-        - Tags
-        - System Description
-        - Status Counts: Passed, Passed with Exception, Excluded
-        Return valid JSON only.
+        You are a SOC 2 compliance analyst.
+
+        If the input chunk has no relevant content (e.g. table of contents, glossary, definitions), return this exact JSON:
+        {{
+            "Exceptions": [],
+            "Tags": [],
+            "System Description": [],
+            "Status Counts": {{"Passed": 0, "Passed with Exception": 0, "Excluded": 0}},
+            "Auditor": "",
+            "Time Period": "",
+            "Scope": ""
+        }}
+
+        Otherwise, extract:
+        - Auditor name and firm
+        - Audit time period
+        - Scope of audit
+        - Notable Exceptions: each with Control, Exception, Response
+        - Risk or focus tags (e.g., Encryption, Access Control)
+        - System description (3–5 bullet points)
+        - Control status summary with: Passed, Passed with Exception, Excluded
+
+        Return output in valid JSON only. Do not include any explanation or formatting.
+
+        {{
+            "Auditor": "...",
+            "Time Period": "...",
+            "Scope": "...",
+            "Exceptions": [{{"Control": "...", "Exception": "...", "Response": "..."}}],
+            "Tags": ["...", "..."],
+            "System Description": ["...", "..."],
+            "Status Counts": {{"Passed": X, "Passed with Exception": Y, "Excluded": Z}}
+        }}
+
         Text:
         {chunk}
         """
+
         try:
-            res = llm([HumanMessage(content=prompt)]).content.strip()
-            res = res.replace("```json", "").replace("```", "").strip()
-            parsed = json.loads(res[res.find("{"):])
-            return parsed
+            response = llm([HumanMessage(content=prompt)])
+            chunk_text = response.content.strip()
+
+            # Retry once if empty
+            if not chunk_text or len(chunk_text) < 30:
+                response = llm([HumanMessage(content=prompt)])
+                chunk_text = response.content.strip()
+
+            chunk_text = chunk_text.encode("utf-8", "ignore").decode().strip()
+
+            if not chunk_text or len(chunk_text) < 5:
+                chunk_errors.append(f"Chunk {i+1}: Empty or invalid response")
+                continue
+
+            if chunk_text.startswith("```json") or chunk_text.startswith("```"):
+                chunk_text = chunk_text.replace("```json", "").replace("```", "").strip()
+
+            json_start = chunk_text.find("{")
+            if json_start > 0:
+                chunk_text = chunk_text[json_start:]
+
+            chunk_result = json.loads(chunk_text)
+
+            if not summary_info["Auditor"]:
+                summary_info["Auditor"] = chunk_result.get("Auditor", "")
+            if not summary_info["Time Period"]:
+                summary_info["Time Period"] = chunk_result.get("Time Period", "")
+            if not summary_info["Scope"]:
+                summary_info["Scope"] = chunk_result.get("Scope", "")
+
+            all_exceptions += chunk_result.get("Exceptions", [])
+            tags_set.update(chunk_result.get("Tags", []))
+            system_bullets += chunk_result.get("System Description", [])
+
+            for k in summary_info["Status Counts"]:
+                try:
+                    summary_info["Status Counts"][k] += int(chunk_result.get("Status Counts", {}).get(k, 0))
+                except:
+                    continue
+
         except Exception as e:
-            chunk_errors.append(f"Chunk {i_chunk+1}: {str(e)}")
-            return None
-
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        results = list(executor.map(process_chunk, range(len(chunks))))
-
-    for result in results:
-        if not result:
-            summary["Failed Chunks"] += 1
+            chunk_errors.append(
+                f"Chunk {i+1}: {str(e)}\n--- Raw GPT Output ---\n{response.content[:500]}\n--- Cleaned Text ---\n{chunk_text[:500]}"
+            )
             continue
 
-        summary["Auditor"] = summary["Auditor"] or result.get("Auditor", "")
-        summary["Time Period"] = summary["Time Period"] or result.get("Time Period", "")
-        summary["Scope"] = summary["Scope"] or result.get("Scope", "")
-        summary["Exceptions"] += result.get("Exceptions", [])
-        tags_set.update(result.get("Tags", []))
-        summary["System Description"] += result.get("System Description", [])
-
-        for k in summary["Status Counts"]:
-            summary["Status Counts"][k] += int(result.get("Status Counts", {}).get(k, 0))
-
-    summary["Tags"] = list(tags_set)
-    summary["System Description"] = list(set(summary["System Description"]))
+    summary_info["Exceptions"] = all_exceptions
+    summary_info["Tags"] = list(tags_set)
+    summary_info["System Description"] = list(set(system_bullets))
+    summary_info["Total Chunks"] = total_chunks
+    summary_info["Failed Chunks"] = len(chunk_errors)
 
     if chunk_errors:
-        summary["Error"] = "\n".join(chunk_errors)
+        summary_info["Error"] = (
+            f"{len(chunk_errors)} chunk(s) failed to parse:\n" + "\n\n".join(chunk_errors)
+        )
 
-    return summary
+    return summary_info
