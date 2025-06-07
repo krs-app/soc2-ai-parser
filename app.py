@@ -41,26 +41,38 @@ if uploaded_file:
         if passed + exceptions + excluded == 0:
             st.warning("No control summary data available.")
         else:
-            fig, ax = plt.subplots(figsize=(5, 5))  # Smaller figure size
+            # Chart setup
+            fig, ax = plt.subplots(figsize=(4, 4))  # smaller size
+        
+            # Values and labels
+            values = [passed, exceptions, excluded]
+            labels = ["Passed", "Passed with Exception", "Excluded"]
+            colors = ["#4CAF50", "#FFA500", "#FF4444"]
         
             wedges, texts, autotexts = ax.pie(
-                [passed, exceptions, excluded],
-                labels=["Passed", "Passed with Exception", "Excluded"],
-                autopct=lambda pct: f"{pct:.1f}% ({int(round(pct/100 * (passed + exceptions + excluded)))})",
+                values,
+                labels=None,  # don't use inside labels (to avoid clutter)
+                colors=colors,
+                autopct=lambda pct: f"{pct:.1f}%\n({int(round(pct/100 * sum(values)))})",
                 startangle=140,
-                wedgeprops={'width': 0.4},
-                textprops=dict(color="black", fontsize=10)
+                wedgeprops={'width': 0.5},
+                textprops=dict(color="black", fontsize=8)
             )
-            ax.axis("equal")
         
-            # Move legend outside
-            ax.legend(wedges, ["Passed", "Passed with Exception", "Excluded"],
-                      title="Status",
-                      loc="center left",
-                      bbox_to_anchor=(1, 0.5),
-                      fontsize=9)
+            ax.axis("equal")  # keep it circular
+        
+            # Legend outside to the right
+            ax.legend(
+                wedges, labels,
+                title="Status",
+                loc="center left",
+                bbox_to_anchor=(1, 0.5),
+                fontsize=9,
+                title_fontsize=10
+            )
         
             st.pyplot(fig)
+
 
             st.markdown(
                 f"""
