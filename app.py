@@ -32,6 +32,8 @@ if uploaded_file:
         def on_chunk(i):
             progress.markdown(f"Processing chunk {i+1} of {total_chunks}...")
 
+        uploaded_file.seek(0)  # Reset the file pointer before reusing
+
         with st.spinner("Processing chunks with GPT-4..."):
             result = extract_soc2_summary(uploaded_file, on_chunk=on_chunk)
 
