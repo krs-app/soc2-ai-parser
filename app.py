@@ -16,7 +16,8 @@ for key, default in {
     "end_time": None,
     "elapsed": None,
     "start_analysis_triggered": False,
-    "abort_requested": False
+    "abort_requested": False,
+    "ready_to_run": False
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -32,6 +33,7 @@ if uploaded_file:
         st.session_state.elapsed = None
         st.session_state.start_analysis_triggered = False
         st.session_state.abort_requested = False
+        st.session_state.ready_to_run = False
 
     # Placeholders for processing details
     details_box = st.empty()
@@ -41,55 +43,50 @@ if uploaded_file:
     time_placeholder = st.empty()
     placeholder_results = st.empty()
 
-    if st.session_state.start_analysis_triggered and not st.session_state.abort_requested:
+    # Show Start/Stop button and trigger logic
+    if not st.session_state.start_analysis_triggered:
+        if st.button("⏳ Start Analysis"):
+            st.session_state.start_analysis_triggered = True
+            st.session_state.abort_requested = False
+            st.session_state.ready_to_run = True
+            st.rerun()
+    else:
         if st.button("⛔ Stop Analysis"):
             st.session_state.abort_requested = True
             st.session_state.start_analysis_triggered = False
             st.session_state.result = None
-            details_box.empty()
-            start_placeholder.empty()
-            chunk_placeholder.empty()
-            end_placeholder.empty()
-            time_placeholder.empty()
-            placeholder_results.empty()
-    else:
-        if st.button("⏳ Start Analysis"):
-            st.session_state.abort_requested = False
-            st.session_state.start_analysis_triggered = True
-            st.session_state.result = None
-            details_box.empty()
-            start_placeholder.empty()
-            chunk_placeholder.empty()
-            end_placeholder.empty()
-            time_placeholder.empty()
-            placeholder_results.empty()
+            st.session_state.ready_to_run = False
+            st.rerun()
 
-            st.session_state.start_time = datetime.now()
+    # If flagged to run, start analysis
+    if st.session_state.ready_to_run:
+        st.session_state.ready_to_run = False
+        st.session_state.start_time = datetime.now()
 
-            details_box.subheader("📌 Processing Details")
-            start_placeholder.markdown(f"**Start Time:** {st.session_state.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            chunk_placeholder.markdown("**Total Chunks Identified:** _Loading..._")
-            end_placeholder.markdown("**End Time:** _Pending..._")
-            time_placeholder.markdown("**Time Taken:** _Pending..._")
+        details_box.subheader("📌 Processing Details")
+        start_placeholder.markdown(f"**Start Time:** {st.session_state.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        chunk_placeholder.markdown("**Total Chunks Identified:** _Loading..._")
+        end_placeholder.markdown("**End Time:** _Pending..._")
+        time_placeholder.markdown("**Time Taken:** _Pending..._")
 
-            with st.spinner("Analyzing the document with GPT..."):
-                start_unix = time.time()
+        with st.spinner("Analyzing the document with GPT..."):
+            start_unix = time.time()
 
-                def run_extraction():
-                    result = extract_soc2_summary(uploaded_file, abort_flag=lambda: st.session_state.abort_requested)
-                    if result and not st.session_state.abort_requested:
-                        st.session_state.result = result
-                        st.session_state.end_time = datetime.now()
-                        st.session_state.elapsed = round(time.time() - start_unix)
+            def run_extraction():
+                result = extract_soc2_summary(uploaded_file, abort_flag=lambda: st.session_state.abort_requested)
+                if result and not st.session_state.abort_requested:
+                    st.session_state.result = result
+                    st.session_state.end_time = datetime.now()
+                    st.session_state.elapsed = round(time.time() - start_unix)
 
-                        chunk_placeholder.markdown(f"**Total Chunks Identified:** {result.get('Total Chunks', '?')}")
-                        end_placeholder.markdown(f"**End Time:** {st.session_state.end_time.strftime('%Y-%m-%d %H:%M:%S')}")
-                        minutes, seconds = divmod(st.session_state.elapsed, 60)
-                        time_placeholder.markdown(f"**Time Taken:** {minutes} min {seconds} sec")
+                    chunk_placeholder.markdown(f"**Total Chunks Identified:** {result.get('Total Chunks', '?')}")
+                    end_placeholder.markdown(f"**End Time:** {st.session_state.end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    minutes, seconds = divmod(st.session_state.elapsed, 60)
+                    time_placeholder.markdown(f"**Time Taken:** {minutes} min {seconds} sec")
 
-                thread = threading.Thread(target=run_extraction)
-                thread.start()
-                thread.join()
+            thread = threading.Thread(target=run_extraction)
+            thread.start()
+            thread.join()
 
 if st.session_state.result:
     result = st.session_state.result
