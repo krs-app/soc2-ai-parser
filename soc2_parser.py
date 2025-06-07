@@ -1,43 +1,41 @@
-# soc2_parser.py
+import fitz  # PyMuPDF
+import os
 from langchain.chat_models import ChatOpenAI
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-import PyPDF2
-
-llm = ChatOpenAI(model_name="gpt-4", temperature=0)
-
-template = """
-You are an expert SOC 2 analyst. Given a SOC 2 report, extract the following insights in cleanly formatted markdown:
-
-1. **Auditor name and firm**
-2. **Report scope and audit time period**
-3. **Any control exceptions and management responses**
-4. **Highlights on control areas like access control, encryption, backups**
-5. **Summary in plain English for leadership team**
-
-Respond using HTML-compatible markdown (like <ul><li> etc), use <strong> for bold parts inside sections, and format control exceptions using bullet points for readability.
-
-Report:
-"""
-
-prompt = PromptTemplate.from_template(template)
-chain = LLMChain(llm=llm, prompt=prompt)
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import HumanMessage
 
 def extract_text_from_pdf(file):
-    reader = PyPDF2.PdfReader(file)
+    doc = fitz.open(stream=file.read(), filetype="pdf")
     text = ""
-    for page in reader.pages:
-        text += page.extract_text() or ""
+    for page in doc:
+        text += page.get_text()
     return text
 
-def extract_soc2_info(file):
-    try:
-        raw_text = extract_text_from_pdf(file)
-        result = chain.run(report=raw_text)
+def extract_soc2_summary(file):
+    raw_text = extract_text_from_pdf(file)
 
-        return {
-            "SOC 2 Summary Report": result
-        }
-    except Exception as e:
-        print(f"Extraction error: {e}")
-        return None
+    prompt = (
+        "You're an expert compliance analyst. "
+        "Given this SOC 2 report, extract the following:\n"
+        "- Auditor Name and Firm\n"
+        "- Time Period of the report\n"
+        "- Scope of audit (systems, teams, functions)\n"
+        "- Any noted exceptions and management responses\n"
+        "- Key security practices (e.g., encryption, access control)\n\n"
+        "Respond in this JSON format:\n"
+        "{\n"
+        "  'Auditor': '',\n"
+        "  'Time Period': '',\n"
+        "  'Scope': '',\n"
+        "  'Exceptions': '',\n"
+        "  'Security Controls': ''\n"
+        "}\n\n"
+        f"Document:\n{raw_text[:7000]}"  # limit to avoid token overload
+    )
+
+    llm = ChatOpenAI(model="gpt-4", temperature=0)
+    response = llm([HumanMessage(content=prompt)])
+    try:
+        return eval(response.content)
+    except Exception:
+        return {"Error": "Failed to parse AI response. Please review raw text."}
