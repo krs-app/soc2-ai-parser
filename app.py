@@ -102,17 +102,20 @@ if st.session_state.result:
         labels = list(status_counts.keys())
         sizes = list(status_counts.values())
 
-        fig, ax = plt.subplots(figsize=(4, 4))
-        wedges, texts, autotexts = ax.pie(
-            sizes,
-            labels=labels,
-            autopct="%1.1f%%",
-            startangle=140,
-            textprops={"fontsize": 8},
-            wedgeprops={'width': 0.5}
-        )
-        ax.axis("equal")
-        st.pyplot(fig)
+        if sizes and sum(sizes) > 0:
+            fig, ax = plt.subplots(figsize=(4, 4))
+            wedges, texts, autotexts = ax.pie(
+                sizes,
+                labels=labels,
+                autopct="%1.1f%%",
+                startangle=140,
+                textprops={"fontsize": 8},
+                wedgeprops={'width': 0.5}
+            )
+            ax.axis("equal")
+            st.pyplot(fig)
+        else:
+            st.info("No control status data available to generate pie chart.")
 
     st.caption(
         f"📄 Processed {result.get('Total Chunks', '?')} chunks"
