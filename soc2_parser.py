@@ -1,6 +1,5 @@
 import fitz  # PyMuPDF
-import ast
-from html import unescape
+import json
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -41,16 +40,17 @@ def extract_soc2_summary(file):
         prompt = f"""
         You are a SOC 2 compliance analyst.
 
-        Read the following report chunk and extract the following:
+        Read the following SOC 2 report chunk and extract these fields:
         - Auditor name and firm
         - Audit time period
         - Scope of audit
-        - Notable Exceptions: each as Control, Exception, Response
+        - Notable Exceptions: each with Control, Exception, Response
         - Risk or focus tags (e.g., Encryption, Access Control)
-        - System description bullets (3–5)
-        - Control status summary as number passed, exception, excluded
+        - System description (3–5 bullet points)
+        - Control status summary with: Passed, Passed with Exception, Excluded
 
-        Return output in this Python dict format:
+        Return output in valid JSON only. Do not include any explanations or code block syntax.
+
         {{
             "Auditor": "...",
             "Time Period": "...",
@@ -67,12 +67,14 @@ def extract_soc2_summary(file):
 
         try:
             response = llm([HumanMessage(content=prompt)])
-            # Clean and safely parse the LLM output
-            cleaned = response.content.replace("‘", "'").replace("’", "'").strip()
-            cleaned = unescape(cleaned)
-            chunk_result = ast.literal_eval(cleaned)
+            chunk_text = response.content.strip()
 
-            # Fill summary info only if not filled yet
+            # Remove ```json blocks if present
+            if chunk_text.startswith("```json"):
+                chunk_text = chunk_text.replace("```json", "").replace("```", "").strip()
+
+            chunk_result = json.loads(chunk_text)
+
             if not summary_info["Auditor"]:
                 summary_info["Auditor"] = chunk_result.get("Auditor", "")
             if not summary_info["Time Period"]:
@@ -81,7 +83,6 @@ def extract_soc2_summary(file):
                 summary_info["Scope"] = chunk_result.get("Scope", "")
 
             all_exceptions += chunk_result.get("Exceptions", [])
-
             tags_set.update(chunk_result.get("Tags", []))
             system_bullets += chunk_result.get("System Description", [])
 
