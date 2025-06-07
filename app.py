@@ -1,5 +1,4 @@
 import streamlit as st
-import matplotlib.pyplot as plt
 from soc2_parser import extract_soc2_summary
 
 st.set_page_config(page_title="SOC 2 Report Parser", layout="wide")
@@ -22,83 +21,59 @@ if uploaded_file:
         st.markdown(f"**Time Period:** {result.get('Time Period', 'N/A')}")
         st.markdown(f"**Scope:** {result.get('Scope', 'N/A')}")
 
-        # ---------- CONTROL STATUS CHART ----------
+        # ---------- CONTROL STATUS VISUAL BAR ----------
         st.divider()
         st.subheader("✅ Control Result Summary")
         status_counts = result.get("Status Counts", {})
-        
-        # Safe parse for chart values
+
+        # Safe int conversion
         def safe_int(val):
             try:
                 return int(val)
             except:
                 return 0
-        
+
         passed = safe_int(status_counts.get("Passed"))
         exceptions = safe_int(status_counts.get("Passed with Exception"))
         excluded = safe_int(status_counts.get("Excluded"))
-        
-        if passed + exceptions + excluded == 0:
-            st.warning("No control summary data available.")
-        else:
-            # Chart setup
-            fig, ax = plt.subplots(figsize=(4, 4))  # smaller size
-        
-            # Values and labels
-            values = [passed, exceptions, excluded]
-            labels = ["Passed", "Passed with Exception", "Excluded"]
-            colors = ["#4CAF50", "#FFA500", "#FF4444"]
-        
-            wedges, texts, autotexts = ax.pie(
-                values,
-                labels=None,  # don't use inside labels (to avoid clutter)
-                colors=colors,
-                autopct=lambda pct: f"{pct:.1f}%\n({int(round(pct/100 * sum(values)))})",
-                startangle=140,
-                wedgeprops={'width': 0.5},
-                textprops=dict(color="black", fontsize=8)
-            )
-        
-            ax.axis("equal")  # keep it circular
-        
-            # Legend outside to the right
-            ax.legend(
-                wedges, labels,
-                title="Status",
-                loc="center left",
-                bbox_to_anchor=(1, 0.5),
-                fontsize=9,
-                title_fontsize=10
-            )
-        
-            st.pyplot(fig)
 
+        st.markdown(
+            f"""
+            <style>
+            .status-bar {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                margin: 10px 0;
+            }}
+            .status-pill {{
+                padding: 8px 14px;
+                border-radius: 20px;
+                color: white;
+                font-weight: bold;
+                font-size: 15px;
+            }}
+            .green-pill {{ background-color: #4CAF50; }}
+            .orange-pill {{ background-color: #FFA500; }}
+            .red-pill {{ background-color: #FF4444; }}
+            </style>
 
-            st.markdown(
-                f"""
-                <style>
-                .badge-container {{ display: flex; gap: 1rem; margin-top: 1rem; }}
-                .badge {{ padding: 0.5rem 1rem; border-radius: 10px; color: white; font-weight: bold; }}
-                .pass {{ background-color: #4CAF50; }}
-                .warn {{ background-color: #FFA500; }}
-                .fail {{ background-color: #FF4444; }}
-                </style>
-                <div class="badge-container">
-                    <div class="badge pass">✔️ Passed: {status_counts.get('Passed', 0)}</div>
-                    <div class="badge warn">⚠️ With Exceptions: {status_counts.get('Passed with Exception', 0)}</div>
-                    <div class="badge fail">❌ Excluded: {status_counts.get('Excluded', 0)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            <div class="status-bar">
+                <div class="status-pill green-pill">✔️ Passed: {passed}</div>
+                <div class="status-pill orange-pill">⚠️ With Exceptions: {exceptions}</div>
+                <div class="status-pill red-pill">❌ Excluded: {excluded}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
         # ---------- EXCEPTIONS ----------
         st.divider()
         st.subheader("⚠️ Notable Exceptions")
-        exceptions = result.get("Exceptions", [])
-        if exceptions:
+        exceptions_list = result.get("Exceptions", [])
+        if exceptions_list:
             with st.expander("View detailed exceptions and management responses"):
-                for ex in exceptions:
+                for ex in exceptions_list:
                     st.markdown(f"""
 - **Control:** {ex.get('Control', 'N/A')}  
   🔸 **Exception:** {ex.get('Exception', 'N/A')}  
