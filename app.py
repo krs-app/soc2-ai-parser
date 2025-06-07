@@ -25,13 +25,22 @@ if uploaded_file:
         # ---------- CONTROL STATUS CHART ----------
         st.divider()
         st.subheader("✅ Control Result Summary")
-        status_counts = result.get("Status Counts", {})
 
-        if status_counts:
+        st.subheader("✅ Control Result Summary")
+        status_counts = result.get("Status Counts", {})
+        
+        # Ensure values are integers and default to 0 if missing
+        passed = int(status_counts.get("Passed", 0) or 0)
+        exceptions = int(status_counts.get("Passed with Exception", 0) or 0)
+        excluded = int(status_counts.get("Excluded", 0) or 0)
+        
+        if passed + exceptions + excluded == 0:
+            st.warning("No control summary data available.")
+        else:
             fig, ax = plt.subplots()
             ax.pie(
-                status_counts.values(),
-                labels=status_counts.keys(),
+                [passed, exceptions, excluded],
+                labels=["Passed", "Passed with Exception", "Excluded"],
                 autopct="%1.1f%%",
                 startangle=90,
                 wedgeprops={'width': 0.4}
