@@ -1,4 +1,6 @@
 import fitz  # PyMuPDF
+import ast
+from html import unescape
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -65,7 +67,10 @@ def extract_soc2_summary(file):
 
         try:
             response = llm([HumanMessage(content=prompt)])
-            chunk_result = eval(response.content)
+            # Clean and safely parse the LLM output
+            cleaned = response.content.replace("‘", "'").replace("’", "'").strip()
+            cleaned = unescape(cleaned)
+            chunk_result = ast.literal_eval(cleaned)
 
             # Fill summary info only if not filled yet
             if not summary_info["Auditor"]:
@@ -88,8 +93,8 @@ def extract_soc2_summary(file):
 
         except Exception as e:
             chunk_errors.append(f"Chunk {i+1}: {str(e)}")
+            continue
 
-    # Final structured return
     summary_info["Exceptions"] = all_exceptions
     summary_info["Tags"] = list(tags_set)
     summary_info["System Description"] = list(set(system_bullets))
