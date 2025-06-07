@@ -4,12 +4,13 @@ from soc2_parser import extract_soc2_summary
 import matplotlib.pyplot as plt
 from datetime import datetime
 import time
+import threading
 
 st.set_page_config(page_title="SOC 2 AI Parser", layout="wide")
 st.title("🔍 SOC 2 Report Analyzer (AI-Powered)")
 
 # Initialize session state
-for key in ["result", "start_time", "end_time", "elapsed", "start_analysis_triggered"]:
+for key in ["result", "start_time", "end_time", "elapsed", "start_analysis_triggered", "abort_requested"]:
     if key not in st.session_state:
         st.session_state[key] = None
 
@@ -23,6 +24,7 @@ if uploaded_file:
         st.session_state.end_time = None
         st.session_state.elapsed = None
         st.session_state.start_analysis_triggered = None
+        st.session_state.abort_requested = None
 
     # Placeholders for processing details
     details_box = st.empty()
@@ -30,74 +32,99 @@ if uploaded_file:
     chunk_placeholder = st.empty()
     end_placeholder = st.empty()
     time_placeholder = st.empty()
+    placeholder_results = st.empty()
 
-    if st.button("⏳ Start Analysis"):
-        st.session_state.start_analysis_triggered = True
-        st.session_state.start_time = datetime.now()
+    if st.session_state.start_analysis_triggered and not st.session_state.abort_requested:
+        if st.button("⛔ Stop Analysis"):
+            st.session_state.abort_requested = True
+            st.session_state.start_analysis_triggered = False
+            st.session_state.result = None
+            details_box.empty()
+            start_placeholder.empty()
+            chunk_placeholder.empty()
+            end_placeholder.empty()
+            time_placeholder.empty()
+            placeholder_results.empty()
+    else:
+        if st.button("⏳ Start Analysis"):
+            st.session_state.abort_requested = False
+            st.session_state.start_analysis_triggered = True
+            st.session_state.result = None
+            details_box.empty()
+            start_placeholder.empty()
+            chunk_placeholder.empty()
+            end_placeholder.empty()
+            time_placeholder.empty()
+            placeholder_results.empty()
 
-        # Display processing info immediately
-        details_box.subheader("📌 Processing Details")
-        start_placeholder.markdown(f"**Start Time:** {st.session_state.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        chunk_placeholder.markdown("**Total Chunks Identified:** _Loading..._")
-        end_placeholder.markdown("**End Time:** _Pending..._")
-        time_placeholder.markdown("**Time Taken:** _Pending..._")
+            st.session_state.start_time = datetime.now()
 
-        with st.spinner("Analyzing the document with GPT..."):
-            start_unix = time.time()
-            result = extract_soc2_summary(uploaded_file)
-            st.session_state.result = result
-            st.session_state.end_time = datetime.now()
-            st.session_state.elapsed = round(time.time() - start_unix)
+            details_box.subheader("📌 Processing Details")
+            start_placeholder.markdown(f"**Start Time:** {st.session_state.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            chunk_placeholder.markdown("**Total Chunks Identified:** _Loading..._")
+            end_placeholder.markdown("**End Time:** _Pending..._")
+            time_placeholder.markdown("**Time Taken:** _Pending..._")
 
-            # Update placeholders
-            chunk_placeholder.markdown(f"**Total Chunks Identified:** {result.get('Total Chunks', '?')}")
-            end_placeholder.markdown(f"**End Time:** {st.session_state.end_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            minutes, seconds = divmod(st.session_state.elapsed, 60)
-            time_placeholder.markdown(f"**Time Taken:** {minutes} min {seconds} sec")
+            with st.spinner("Analyzing the document with GPT..."):
+                start_unix = time.time()
 
-# Display results
+                def run_extraction():
+                    result = extract_soc2_summary(uploaded_file, abort_flag=lambda: st.session_state.abort_requested)
+                    if result and not st.session_state.abort_requested:
+                        st.session_state.result = result
+                        st.session_state.end_time = datetime.now()
+                        st.session_state.elapsed = round(time.time() - start_unix)
+
+                        chunk_placeholder.markdown(f"**Total Chunks Identified:** {result.get('Total Chunks', '?')}")
+                        end_placeholder.markdown(f"**End Time:** {st.session_state.end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                        minutes, seconds = divmod(st.session_state.elapsed, 60)
+                        time_placeholder.markdown(f"**Time Taken:** {minutes} min {seconds} sec")
+
+                thread = threading.Thread(target=run_extraction)
+                thread.start()
+                thread.join()
+
 if st.session_state.result:
     result = st.session_state.result
-
-    st.subheader("📊 Summary Insights")
+    placeholder_results.subheader("📊 Summary Insights")
 
     if "Error" in result:
-        st.error("⚠️ Some chunks could not be parsed.")
-        st.code(result["Error"])
+        placeholder_results.error("⚠️ Some chunks could not be parsed.")
+        placeholder_results.code(result["Error"])
 
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = placeholder_results.columns([2, 1])
 
     with col1:
-        st.markdown(f"**Auditor:** {result.get('Auditor', '')}")
-        st.markdown(f"**Time Period:** {result.get('Time Period', '')}")
-        st.markdown(f"**Scope:** {result.get('Scope', '')}")
+        placeholder_results.markdown(f"**Auditor:** {result.get('Auditor', '')}")
+        placeholder_results.markdown(f"**Time Period:** {result.get('Time Period', '')}")
+        placeholder_results.markdown(f"**Scope:** {result.get('Scope', '')}")
 
-        st.markdown("**Tags Identified:**")
+        placeholder_results.markdown("**Tags Identified:**")
         tags = result.get("Tags", [])
         if tags:
-            st.markdown(", ".join(tags))
+            placeholder_results.markdown(", ".join(tags))
         else:
-            st.markdown("_No tags identified._")
+            placeholder_results.markdown("_No tags identified._")
 
-        st.markdown("**System Description:**")
+        placeholder_results.markdown("**System Description:**")
         desc = result.get("System Description", [])
         if isinstance(desc, list):
             for item in desc:
                 if isinstance(item, str) and item.strip():
-                    st.markdown(f"- {item.strip()}")
+                    placeholder_results.markdown(f"- {item.strip()}")
         elif isinstance(desc, str):
-            st.markdown(f"- {desc.strip()}")
+            placeholder_results.markdown(f"- {desc.strip()}")
         else:
-            st.markdown("_No system description found._")
+            placeholder_results.markdown("_No system description found._")
 
-        st.markdown("**Exceptions Found:**")
+        placeholder_results.markdown("**Exceptions Found:**")
         for ex in result.get("Exceptions", []):
-            with st.expander(f"🔸 {ex['Control']}"):
-                st.markdown(f"**Exception:** {ex['Exception']}")
-                st.markdown(f"**Response:** {ex['Response']}")
+            with placeholder_results.expander(f"🔸 {ex['Control']}"):
+                placeholder_results.markdown(f"**Exception:** {ex['Exception']}")
+                placeholder_results.markdown(f"**Response:** {ex['Response']}")
 
     with col2:
-        st.markdown("**Control Status Summary:**")
+        placeholder_results.markdown("**Control Status Summary:**")
         status_counts = result.get("Status Counts", {})
         labels = list(status_counts.keys())
         sizes = list(status_counts.values())
@@ -112,9 +139,9 @@ if st.session_state.result:
             wedgeprops={'width': 0.5}
         )
         ax.axis("equal")
-        st.pyplot(fig)
+        placeholder_results.pyplot(fig)
 
-    st.caption(
+    placeholder_results.caption(
         f"📄 Processed {result.get('Total Chunks', '?')} chunks"
         + (f", {result.get('Failed Chunks', 0)} failed to parse." if result.get("Failed Chunks", 0) > 0 else ".")
     )
